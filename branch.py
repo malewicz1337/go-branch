@@ -1,22 +1,32 @@
 import os
 import subprocess
-from datetime import datetime
+from datetime import datetime, timedelta
 import time
 
 # --- Configuration ---
 MAIN_BRANCH = "main"
 LOG_FILE = "branch.log"
+START_DATE = datetime(2025, 8, 4, 9, 0, 0)
+ITERATIONS = 10
 # ---------------------
 
 
-def run_command(command):
+def run_command(command, env=None):
     """
     Executes a shell command, prints its output, and raises an exception on error.
     """
     print(f"\n> {' '.join(command)}")
+
+    process_env = os.environ.copy()
+    if env:
+        print(f"  (with custom env: {env})")
+        process_env.update(env)
+
     try:
         # Using capture_output=True to get stdout/stderr
-        result = subprocess.run(command, check=True, text=True, capture_output=True)
+        result = subprocess.run(
+            command, check=True, text=True, capture_output=True, env=process_env
+        )
         if result.stdout:
             print(result.stdout)
         if result.stderr:
@@ -39,7 +49,6 @@ def main():
         print("Error: This script must be run from the root of a Git repository.")
         return
 
-    iterations = 50
     counter = 0
     while True:
         counter += 1
@@ -48,6 +57,13 @@ def main():
             timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
             new_branch_name = f"feature/log-update-{timestamp}"
             print(f"Creating a new branch named: {new_branch_name}")
+
+            current_commit_date = START_DATE + timedelta(minutes=counter)
+            iso_date = current_commit_date.isoformat()
+            commit_env = {
+                "GIT_AUTHOR_DATE": iso_date,
+                "GIT_COMMITTER_DATE": iso_date,
+            }
 
             # 3. Start from a clean slate on the main branch
             run_command(["git", "checkout", MAIN_BRANCH])
@@ -66,14 +82,14 @@ def main():
             # 6. Stage and commit the changes
             run_command(["git", "add", LOG_FILE])
             commit_message = f"feat: Add new entry to {LOG_FILE}"
-            run_command(["git", "commit", "-m", commit_message])
+            run_command(["git", "commit", "-m", commit_message], env=commit_env)
 
             # 7. Switch back to the main branch
             run_command(["git", "checkout", MAIN_BRANCH])
 
             # 8. Merge the new branch into main
             # Using --no-ff creates a merge commit, preserving branch history
-            run_command(["git", "merge", "--no-ff", new_branch_name])
+            run_command(["git", "merge", "--no-ff", new_branch_name], env=commit_env)
             print(f"\nSuccessfully merged '{new_branch_name}' into '{MAIN_BRANCH}'.")
 
             # 9. (Optional but recommended) Delete the feature branch
@@ -84,8 +100,8 @@ def main():
 
             time.sleep(1)
 
-            if counter >= iterations:
-                print(f"\nReached the maximum of {iterations} iterations. Exiting.")
+            if counter >= ITERATIONS:
+                print(f"\nReached the maximum of {ITERATIONS} ITERATIONS. Exiting.")
                 break
 
         except subprocess.CalledProcessError:
